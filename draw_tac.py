@@ -12,6 +12,20 @@ pygame.init()
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 done = False
 
+class Slot:
+    def __init__(self, slot_type):
+        self.slot_type = slot_type
+
+    @staticmethod
+    def create_simple_slot(index):
+        simple_slot = Slot("simple")
+        simple_slot.index = index
+        simple_slot.position = (
+            int(WINDOW_WIDTH/2 + SLOT_CIRCLE_RADIUS*cos(slot_angle)),
+            int(WINDOW_HEIGHT/2 + SLOT_CIRCLE_RADIUS*sin(slot_angle))
+        )
+
+
 def slot_index_to_angle(index):
     return math.pi/2 + index * 2 *math.pi / 64
 
@@ -24,15 +38,15 @@ def draw_tac_board(surface):
     )
 
     for i in range(64):
-        angle = 2*math.pi/64
-        pygame.draw.circle(surface, (255, 255, 255),
-        (int(WINDOW_WIDTH / 2 + SLOT_CIRCLE_RADIUS * math.cos(i * angle)), int(WINDOW_HEIGHT / 2 + SLOT_CIRCLE_RADIUS * math.sin(i * angle))), int(SLOT_RADIUS))
+        slot = Slot.create_simple_slot(i)
+        draw_disk(surface, slot, (255, 255, 255))
 
-def draw_ball(surface, slot, color):
-    if slot.type = "normal":
-        draw
+def draw_ball_circle(surface, color, position):
+    
+def draw_disk(surface, slot, color):
+    pygame.draw.circle(surface, color, slot.position, int(SLOT_RADIUS))
+        
 
-def draw_at
 while not done:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
