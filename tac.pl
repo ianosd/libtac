@@ -1,10 +1,10 @@
 :- use_module(library(lists)).
 
 sample_state([
-    [ball(s(0), ishot), ball(s(63), ishot), ball(s(62), ishot), ball(s(61), nothot)],
-    [ball(s(0), ishot), ball(s(0), nothot), ball(s(0), nothot), ball(s(0), nothot)],
-    [ball(s(0), ishot), ball(s(0), nothot), ball(s(0), nothot), ball(s(0), nothot)],
-    [ball(s(0), ishot), ball(s(0), nothot), ball(s(0), nothot), ball(s(0), nothot)]
+    [ball(r(0), nothot), ball(r(0), nothot), ball(r(0), nothot), ball(r(0), nothot)],
+    [ball(r(1), nothot), ball(r(1), nothot), ball(r(1), nothot), ball(r(1), nothot)],
+    [ball(r(2), nothot), ball(r(2), nothot), ball(r(2), nothot), ball(r(2), nothot)],
+    [ball(h(0, 3), ishot), ball(r(3), nothot), ball(r(3), nothot), ball(r(3), nothot)]
 ]).
 range(Low, Low, _).
 range(X, Low, High) :- NewLow is Low + 1, NewLow < High, range(X, NewLow, High).
