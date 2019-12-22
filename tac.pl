@@ -1,11 +1,12 @@
 :- use_module(library(lists)).
 
-sample_state([
-    [ball(s(0), nothot), ball(r(0), nothot), ball(r(0), nothot), ball(r(0), nothot)],
-    [ball(s(2), nothot), ball(r(1), nothot), ball(r(1), nothot), ball(r(1), nothot)],
-    [ball(r(2), nothot), ball(r(2), nothot), ball(r(2), nothot), ball(r(2), nothot)],
-    [ball(h(0, 3), ishot), ball(r(3), nothot), ball(r(3), nothot), ball(r(3), nothot)]
-]).
+sample_state(
+    [
+	[ball(s(0), nothot), ball(r(0), nothot), ball(r(0), nothot), ball(r(0), nothot)],
+	[ball(s(2), nothot), ball(r(1), nothot), ball(r(1), nothot), ball(r(1), nothot)],
+	[ball(r(2), nothot), ball(r(2), nothot), ball(r(2), nothot), ball(r(2), nothot)],
+	[ball(h(0, 3), ishot), ball(r(3), nothot), ball(r(3), nothot), ball(r(3), nothot)]
+    ]).
 range(Low, Low, _).
 range(X, Low, High) :- NewLow is Low + 1, NewLow < High, range(X, NewLow, High).
 
@@ -19,6 +20,11 @@ player_pair(0, 2).
 player_pair(2, 0).
 player_pair(1, 3).
 player_pair(3, 1).
+
+player_start_slot(0, s(0)).
+player_start_slot(1, s(16)).
+player_start_slot(2, s(32)).
+player_start_slot(3, s(48)).
 
 % enter home
 is_next(s(0), h(0, 0), ishot, _, 0).
@@ -47,34 +53,14 @@ all_balls_are_home(PlayerBalls, PlayerIndex):-
     member(ball(h(2, PlayerIndex)), PlayerBalls),
     member(ball(h(3, PlayerIndex)), PlayerBalls).
 
-move_other_player(AllBalls, StateFinal, PlayerIndex, MovementSize, MovementType):-
-    nth0(PlayerIndex, AllBalls, PlayerBalls), all_balls_are_home(PlayerBalls, PlayerIndex),
-    player_pair(PlayerIndex, PairIndex),
-    move(AllBalls, StateFinal, PairIndex, MovementSize, MovementType).
+put_ball_in_game(AllBalls, StateFinal, PlayerIndex):-
+    nth0(PlayerIndex, AllBalls, PlayerBalls),
+    player_reserve_ball(PlayerBalls, ReserveBallIndex),
+    player_start_slot(PlayerIndex, Slot),
+    put_ball(AllBalls, StateFinal, PlayerIndex, ReserveBallIndex, ball(Slot, not_hot), can_displace).
 
-move_direct(AllBalls, NewAllBalls, PlayerIndex, MovementSize, MovementType):-
-    nth0(PlayerIndex, AllBalls, PlayerBalls), range(BallIndex, 0, 4), nth0(BallIndex, PlayerBalls, ball(BallPosition, IsHot)),
-    distance(BallPosition, NewPosition, MovementSize, IsHot, MovementType, PlayerIndex),
-    put(PlayerBalls, NewPlayerBalls, BallIndex, ball(NewPosition, 1)),
-    put(AllBalls, NewAllBalls, PlayerIndex, NewPlayerBalls).
-
-
-move_ball_to_reserve([], _, _):- !, fail.
-move_ball_to_reserve([PlayerBalls|R], Position, PlayerIndex, [AlteredPlayerBalls|R]):-
-    position_is_occupied_in_player_balls(PlayerBalls, Position, PlayerIndex, AlteredPlayerBalls), !.
-move_ball_to_reserve([H| Rest],  Position, PlayerIndex, [H|AlteredRest]):-
-    NewPlayerIndex is PlayerIndex + 1,
-    move_ball_to_reserve(Rest, Position, NewPlayerIndex, AlteredRest), !.
-
-position_is_occupied_in_player_balls([ball(Position, _)|Rest], Position, PlayerIndex, [ball(r(PlayerIndex), not_hot)|Rest]):-!.
-position_is_occupied_in_player_balls([H|Rest], Position, PlayerIndex, [H|AlteredRest]):-
-    position_is_occupied_in_player_balls(Rest, Position, PlayerIndex, AlteredRest).
-
-
-move_player_ball_to_reserve([], _, _, _):- !, fail.
-move_player_ball_to_reserve([ball(Slot, _)|Rest], Slot, PlayerIndex, [ball(r(PlayerIndex))|Rest]):-!.
-move_player_ball_to_reserve([_, Rest], Slot, PlayerIndex, AlteredRest):- move_player_ball_to_reserve(Rest, Slot, PlayerIndex, AlteredRest), !.
-
+player_reserve_ball([ball(r(_), _)|_], 0):-!.
+player_reserve_ball([_|Rest], Index):- player_reserve_ball(Rest, IndexRest), Index is IndexRest + 1.
 
 move(X, X, _, 0, _):-!.
 
@@ -92,6 +78,28 @@ move(AllBalls, StateFinal, PlayerIndex, MovementSize, distributed):-
 
 move(AllBalls, StateFinal, PlayerIndex, MovementSize, distributed):-
     move_other_player(AllBalls, StateFinal, PlayerIndex, MovementSize, distributed).
+
+move_other_player(AllBalls, StateFinal, PlayerIndex, MovementSize, MovementType):-
+    nth0(PlayerIndex, AllBalls, PlayerBalls), all_balls_are_home(PlayerBalls, PlayerIndex),
+    player_pair(PlayerIndex, PairIndex),
+    move(AllBalls, StateFinal, PairIndex, MovementSize, MovementType).
+
+move_ball_to_reserve([], _, _):- !, fail.
+move_ball_to_reserve([PlayerBalls|R], Position, PlayerIndex, [AlteredPlayerBalls|R]):-
+    position_is_occupied_in_player_balls(PlayerBalls, Position, PlayerIndex, AlteredPlayerBalls), !.
+move_ball_to_reserve([H| Rest],  Position, PlayerIndex, [H|AlteredRest]):-
+    NewPlayerIndex is PlayerIndex + 1,
+    move_ball_to_reserve(Rest, Position, NewPlayerIndex, AlteredRest), !.
+
+position_is_occupied_in_player_balls([ball(Position, _)|Rest], Position, PlayerIndex, [ball(r(PlayerIndex), not_hot)|Rest]):-!.
+position_is_occupied_in_player_balls([H|Rest], Position, PlayerIndex, [H|AlteredRest]):-
+    position_is_occupied_in_player_balls(Rest, Position, PlayerIndex, AlteredRest).
+
+move_player_ball_to_reserve([], _, _, _):- !, fail.
+move_player_ball_to_reserve([ball(Slot, _)|Rest], Slot, PlayerIndex, [ball(r(PlayerIndex))|Rest]):-!.
+move_player_ball_to_reserve([_, Rest], Slot, PlayerIndex, AlteredRest):- move_player_ball_to_reserve(Rest, Slot, PlayerIndex, AlteredRest), !.
+
+
     
 move_single_ball(AllBalls, StateFinal, PlayerIndex, MovementSize, MovementType):-
     range(BallIndex, 0, 4),
