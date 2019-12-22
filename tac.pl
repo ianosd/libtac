@@ -1,8 +1,8 @@
 :- use_module(library(lists)).
 
 sample_state([
-    [ball(r(0), nothot), ball(r(0), nothot), ball(r(0), nothot), ball(r(0), nothot)],
-    [ball(r(1), nothot), ball(r(1), nothot), ball(r(1), nothot), ball(r(1), nothot)],
+    [ball(s(0), nothot), ball(r(0), nothot), ball(r(0), nothot), ball(r(0), nothot)],
+    [ball(s(2), nothot), ball(r(1), nothot), ball(r(1), nothot), ball(r(1), nothot)],
     [ball(r(2), nothot), ball(r(2), nothot), ball(r(2), nothot), ball(r(2), nothot)],
     [ball(h(0, 3), ishot), ball(r(3), nothot), ball(r(3), nothot), ball(r(3), nothot)]
 ]).
@@ -58,30 +58,74 @@ move_direct(AllBalls, NewAllBalls, PlayerIndex, MovementSize, MovementType):-
     put(PlayerBalls, NewPlayerBalls, BallIndex, ball(NewPosition, 1)),
     put(AllBalls, NewAllBalls, PlayerIndex, NewPlayerBalls).
 
-move_direct(AllBalls, StateFinal, PlayerIndex, MovementSize, MovementType):-
-    nth0(PlayerIndex, AllBalls, PlayerBalls), range(BallIndex, 0, 4), nth0(BallIndex, PlayerBalls, ball(BallPosition, IsHot)),
-    range(MoveSelf, 0, MovementSize), MoveOther is MovementSize - MoveSelf,
-    distance(BallPosition, NewPosition, MoveSelf, IsHot, MovementType, PlayerIndex),
-    put(PlayerBalls, NewPlayerBalls, BallIndex, ball(NewPosition, 1)),
-    put(AllBalls, NewAllBalls, PlayerIndex, NewPlayerBalls),
-    move_other_player(NewAllBalls, StateFinal, PlayerIndex, MoveOther, forward).
+
+move_ball_to_reserve([], _, _):- !, fail.
+move_ball_to_reserve([PlayerBalls|R], Position, PlayerIndex, [AlteredPlayerBalls|R]):-
+    position_is_occupied_in_player_balls(PlayerBalls, Position, PlayerIndex, AlteredPlayerBalls), !.
+move_ball_to_reserve([H| Rest],  Position, PlayerIndex, [H|AlteredRest]):-
+    NewPlayerIndex is PlayerIndex + 1,
+    move_ball_to_reserve(Rest, Position, NewPlayerIndex, AlteredRest), !.
+
+position_is_occupied_in_player_balls([ball(Position, _)|Rest], Position, PlayerIndex, [ball(r(PlayerIndex), not_hot)|Rest]):-!.
+position_is_occupied_in_player_balls([H|Rest], Position, PlayerIndex, [H|AlteredRest]):-
+    position_is_occupied_in_player_balls(Rest, Position, PlayerIndex, AlteredRest).
+
+
+move_player_ball_to_reserve([], _, _, _):- !, fail.
+move_player_ball_to_reserve([ball(Slot, _)|Rest], Slot, PlayerIndex, [ball(r(PlayerIndex))|Rest]):-!.
+move_player_ball_to_reserve([_, Rest], Slot, PlayerIndex, AlteredRest):- move_player_ball_to_reserve(Rest, Slot, PlayerIndex, AlteredRest), !.
+
+
+move(X, X, _, 0, _):-!.
 
 move(StateInitial, StateFinal, PlayerIndex, MovementSize, forward):- 
-    move_direct(StateInitial, StateFinal, PlayerIndex, MovementSize, forward).
+    move_single_ball(StateInitial, StateFinal, PlayerIndex, MovementSize, forward).
 
 move(StateInitial, StateFinal, PlayerIndex, MovementSize, backward):-
-    move_direct(StateInitial, StateFinal, PlayerIndex, MovementSize, backward).
+    move_single_ball(StateInitial, StateFinal, PlayerIndex, MovementSize, backward).
 
 move(AllBalls, StateFinal, PlayerIndex, MovementSize, distributed):-
     nth0(PlayerIndex, AllBalls, PlayerBalls), range(BallIndex, 0, 4), nth0(BallIndex, PlayerBalls, ball(BallPosition, IsHot)),
     is_next(BallPosition, NextPosition, IsHot, distributed, PlayerIndex), MovementSizeUpdated is MovementSize - 1,
-    put(PlayerBalls, NewPlayerBalls, BallIndex, ball(NextPosition, ishot)),
-    put(AllBalls, NewAllBalls, PlayerIndex, NewPlayerBalls),
-    move_distributed_continue(NewAllBalls, StateFinal, PlayerIndex, MovementSizeUpdated).
+    put_ball(AllBalls, NewAllBalls, PlayerIndex, BallIndex, ball(NextPosition, is_hot), can_displace),
+    move(NewAllBalls, StateFinal, PlayerIndex, MovementSizeUpdated, distributed).
 
-move_distributed_continue(_, _, _, 0):-!.
-move_distributed_continue(StateInitial, StateFinal, PlayerIndex, MovementSize):-
-    move(StateInitial, StateFinal, PlayerIndex, MovementSize, distributed).
+move(AllBalls, StateFinal, PlayerIndex, MovementSize, distributed):-
+    move_other_player(AllBalls, StateFinal, PlayerIndex, MovementSize, distributed).
+    
+move_single_ball(AllBalls, StateFinal, PlayerIndex, MovementSize, MovementType):-
+    range(BallIndex, 0, 4),
+    move_ball_in_steps(AllBalls, StateFinal, PlayerIndex, BallIndex, MovementSize, MovementType).
 
-move_distributed_continue(StateInitial, StateFinal, PlayerIndex, MovementSize):-
-    move_other_player(StateInitial, StateFinal, PlayerIndex, MovementSize, distributed).
+move_ball_in_steps(X, X, _, _, 0, _):-!.
+move_ball_in_steps(AllBalls, NewAllBalls, PlayerIndex, BallIndex, MovementSize, MovementType):-
+    nth0(PlayerIndex, AllBalls, PlayerBalls), nth0(BallIndex, PlayerBalls, ball(BallPosition, IsHot)),
+    is_next(BallPosition, NextPosition, IsHot, MovementType, PlayerIndex),
+    get_can_displace(MovementSize, MovementType, CanDisplace),
+    put_ball(AllBalls, Intermediate, PlayerIndex, BallIndex, ball(NextPosition, is_hot), CanDisplace),
+    MovementSizeUpdated is MovementSize - 1,
+    move_ball_in_steps(Intermediate, NewAllBalls, PlayerIndex, BallIndex, MovementSizeUpdated, MovementType).
+
+move_ball_in_steps(AllBalls, NewAllBalls, PlayerIndex, _, MovementSize, MovementType):-
+    move_other_player(AllBalls, NewAllBalls, PlayerIndex, MovementSize, MovementType). 
+
+
+put_ball(AllBalls, NewAllBalls, PlayerIndex, BallIndex, NewBall, can_displace):-
+    ball(Slot, _) = NewBall,
+    move_ball_to_reserve(AllBalls, Slot, 0, AlteredBalls),
+    put_ball_no_displace(AlteredBalls, NewAllBalls, PlayerIndex, BallIndex, NewBall), !.
+
+put_ball(AllBalls, _, _, _, ball(Slot, _), can_not_displace):-
+    move_ball_to_reserve(AllBalls, Slot, 3, _), !, fail.
+
+put_ball(AllBalls, NewAllBalls, PlayerIndex, BallIndex, NewBall, _):-
+    put_ball_no_displace(AllBalls, NewAllBalls, PlayerIndex, BallIndex, NewBall).
+
+put_ball_no_displace(AllBalls, NewAllBalls, PlayerIndex, BallIndex, NewBall):-
+    nth0(PlayerIndex, AllBalls, PlayerBalls),
+    put(PlayerBalls, NewPlayerBalls, BallIndex, NewBall),
+    put(AllBalls, NewAllBalls, PlayerIndex, NewPlayerBalls).
+
+get_can_displace(1, _, can_displace):-!.
+get_can_displace(_, distributed, can_displace):-!.
+get_can_displace(_, _, can_not_displace):-!.
