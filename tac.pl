@@ -1,12 +1,54 @@
 :- use_module(library(lists)).
 
 sample_state(
-    [
-	[ball(s(0), nothot), ball(r(0), nothot), ball(r(0), nothot), ball(r(0), nothot)],
-	[ball(s(2), nothot), ball(r(1), nothot), ball(r(1), nothot), ball(r(1), nothot)],
-	[ball(r(2), nothot), ball(r(2), nothot), ball(r(2), nothot), ball(r(2), nothot)],
-	[ball(h(0, 3), ishot), ball(r(3), nothot), ball(r(3), nothot), ball(r(3), nothot)]
-    ]).
+    game_state(
+	all_balls([
+	    [ball(r(0), nothot), ball(r(0), nothot), ball(r(0), nothot), ball(r(0), nothot)],
+	    [ball(s(16), nothot), ball(r(1), nothot), ball(r(1), nothot), ball(r(1), nothot)],
+	    [ball(r(2), nothot), ball(r(2), nothot), ball(r(2), nothot), ball(r(2), nothot)],
+	    [ball(h(0, 3), ishot), ball(r(3), nothot), ball(r(3), nothot), ball(r(3), nothot)]
+	]),
+	all_cards([
+	    [13, 5],
+	    [1, 7],
+	    [5, 2],
+	    [3, 4]
+	]),
+	current_player_index(0)
+    )
+).
+
+play(InitialState, NextState, PlayedCard):-
+    play_no_throwaway(InitialState, NextState, PlayedCard).
+
+play(InitialState, NextState, _):-
+    play_no_throwaway(InitialState, NextState, _), !, fail.
+    
+play(InitialState, NextState, PlayedCard):-
+    InitialState = game_state(AllBalls, all_cards(Cards), current_player_index(PlayerIndex)),
+    nth0(PlayerIndex, Cards, PlayerCards),
+    select(PlayedCard, PlayerCards, UpdatedPlayerCards),
+    put(Cards, UpdatedCards, PlayerIndex, UpdatedPlayerCards),
+    NextPlayerIndex is (PlayerIndex + 1) mod 4,
+    NextState = game_state(AllBalls, all_cards(UpdatedCards), current_player_index(NextPlayerIndex)).
+
+play_no_throwaway(InitialState, NextState, PlayedCard):-
+    InitialState = game_state(all_balls(Balls), all_cards(Cards), current_player_index(PlayerIndex)),
+    nth0(PlayerIndex, Cards, PlayerCards),
+    select(PlayedCard, PlayerCards, UpdatedPlayerCards),
+    play_card(Balls, NewBalls, PlayerIndex, PlayedCard),
+    put(Cards, UpdatedCards, PlayerIndex, UpdatedPlayerCards),
+    NextPlayerIndex is (PlayerIndex + 1) mod 4,
+    NextState = game_state(all_balls(NewBalls), all_cards(UpdatedCards), current_player_index(NextPlayerIndex)).
+
+play_card(AllBalls, NewBalls, PlayerIndex, 1) :- put_ball_in_game(AllBalls, NewBalls, PlayerIndex).
+play_card(AllBalls, NewBalls, PlayerIndex, 13):- put_ball_in_game(AllBalls, NewBalls, PlayerIndex).
+play_card(AllBalls, NewBalls, PlayerIndex, 7) :- move(AllBalls, NewBalls, PlayerIndex, 7, distributed).
+play_card(_, _, _, 7) :- !, fail.
+play_card(AllBalls, NewBalls, PlayerIndex, 4) :- move(AllBalls, NewBalls, PlayerIndex, 4, backward).
+play_card(_, _, _, 4) :- !, fail.
+play_card(AllBalls, NewBalls, PlayerIndex, X) :- number(X), move(AllBalls, NewBalls, PlayerIndex, X, forward).
+
 range(Low, Low, _).
 range(X, Low, High) :- NewLow is Low + 1, NewLow < High, range(X, NewLow, High).
 
@@ -124,7 +166,7 @@ put_ball(AllBalls, NewAllBalls, PlayerIndex, BallIndex, NewBall, can_displace):-
     put_ball_no_displace(AlteredBalls, NewAllBalls, PlayerIndex, BallIndex, NewBall), !.
 
 put_ball(AllBalls, _, _, _, ball(Slot, _), can_not_displace):-
-    move_ball_to_reserve(AllBalls, Slot, 3, _), !, fail.
+    move_ball_to_reserve(AllBalls, Slot, 0, _), !, fail.
 
 put_ball(AllBalls, NewAllBalls, PlayerIndex, BallIndex, NewBall, _):-
     put_ball_no_displace(AllBalls, NewAllBalls, PlayerIndex, BallIndex, NewBall).
