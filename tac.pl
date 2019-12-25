@@ -18,6 +18,26 @@ sample_state(
     )
 ).
 
+get_current_player_index(game_state(_, _, current_player_index(PlayerIndex)), PlayerIndex).
+
+player_move(Card, Motions, PlayerIndex, InitialState, NextState):-
+    game_state(all_balls(AllBalls), _, current_player_index(PlayerIndex)) = InitialState,
+    apply_motions(AllBalls, NewAllBalls, Motions),
+    NextState = game_state(all_balls(NewAllBalls), _, _),
+    play(InitialState, NextState, Card).
+
+apply_motions(AllBalls, AllBalls, []).
+apply_motions(AllBalls, NewAllBalls, [M|R]):- apply_motion(AllBalls, Intermediate, M), apply_motions(Intermediate, NewAllBalls, R).
+
+apply_motion(AllBalls, NewAllBalls, put_ball_in_game(PlayerIndex)):-
+    put_ball_in_game(AllBalls, NewAllBalls, PlayerIndex).
+
+apply_motion(AllBalls, NewAllBalls, move(PlayerIndex, BallIndex, NewPosition)):-
+    nth0(PlayerIndex, AllBalls, PlayerBalls), nth0(BallIndex, PlayerBalls, Ball),
+    ball(Slot, IsHot) = Ball,
+    distance(Slot, NewPosition, Distance, IsHot, Mode),
+    move_single_ball(AllBalls, NewAllBalls, PlayerIndex, BallIndex, Distance, Mode).
+
 play(InitialState, NextState, PlayedCard):-
     play_no_throwaway(InitialState, NextState, PlayedCard).
 
@@ -90,10 +110,10 @@ distance(Start, End, Distance, IsHot, Mode, P):-
     distance(Intermediate, End, Ds, IsHot, Mode, P).
 
 all_balls_are_home(PlayerBalls, PlayerIndex):-
-    member(ball(h(0, PlayerIndex)), PlayerBalls),
-    member(ball(h(1, PlayerIndex)), PlayerBalls),
-    member(ball(h(2, PlayerIndex)), PlayerBalls),
-    member(ball(h(3, PlayerIndex)), PlayerBalls).
+    member(ball(h(0, PlayerIndex), _), PlayerBalls),
+    member(ball(h(1, PlayerIndex), _), PlayerBalls),
+    member(ball(h(2, PlayerIndex), _), PlayerBalls),
+    member(ball(h(3, PlayerIndex), _), PlayerBalls).
 
 put_ball_in_game(AllBalls, StateFinal, PlayerIndex):-
     nth0(PlayerIndex, AllBalls, PlayerBalls),
