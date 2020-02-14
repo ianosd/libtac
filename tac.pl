@@ -3,40 +3,101 @@
 sample_state(
     game_state(
 	all_balls([
-	    [ball(r(0), nothot), ball(r(0), nothot), ball(r(0), nothot), ball(r(0), nothot)],
-	    [ball(s(16), nothot), ball(r(1), nothot), ball(r(1), nothot), ball(r(1), nothot)],
+	    [ball(s(0), nothot), ball(r(0), nothot), ball(r(0), nothot), ball(r(0), nothot)],
+	    [ball(r(1), nothot), ball(r(1), nothot), ball(r(1), nothot), ball(r(1), nothot)],
 	    [ball(r(2), nothot), ball(r(2), nothot), ball(r(2), nothot), ball(r(2), nothot)],
 	    [ball(h(0, 3), ishot), ball(r(3), nothot), ball(r(3), nothot), ball(r(3), nothot)]
 	]),
 	all_cards([
-	    [13, 5],
+	    [7, 5],
 	    [1, 7],
 	    [5, 2],
 	    [3, 4]
 	]),
-	current_player_index(0)
+	current_player_index(0),
+	turn_state(before_card)
     )
 ).
 
-get_current_player_index(game_state(_, _, current_player_index(PlayerIndex)), PlayerIndex).
+test(LastState):- sample_state(InitialState), player_action(play_card(7), 0, InitialState, LastState).
 
-player_move(Card, Motions, PlayerIndex, InitialState, NextState):-
-    game_state(all_balls(AllBalls), _, current_player_index(PlayerIndex)) = InitialState,
-    apply_motions(AllBalls, NewAllBalls, Motions),
-    NextState = game_state(all_balls(NewAllBalls), _, _),
-    play(InitialState, NextState, Card).
+compute_turn_state_after_played_card(Card, InitialState, TurnState, PlayerIndex):-
+    game_state(all_balls(AllBalls), all_cards(AllCards), current_player_index(PlayerIndex), turn_state(before_card)) = InitialState,
+    basic_c(Card, TurnState),
+    card_to_movement_type(Card, MovementType),
+    move(AllBalls, _, PlayerIndex, Card, MovementType), !.
+
+compute_turn_state_after_played_card(_, InitialState, before_card, NextPlayerIndex):-
+    game_state(_, _, current_player_index(PlayerIndex), _) = InitialState,
+    NextPlayerIndex is (PlayerIndex + 1) mod 4. 
+
+basic_c(7, after_7(7)).
+basic_c(X, after_card(X)):- member(X, [1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 13]).
+
+card_to_movement_type(7, distributed).
+card_to_movement_type(4, backward).
+card_to_movement_type(X, forward):- member(X, [1, 2, 3, 5, 6, 8, 9, 10, 12, 13]).
+
+player_action(play_card(Card), PlayerIndex, InitialState, NextState):-
+    game_state(all_balls(AllBalls), all_cards(AllCards), current_player_index(PlayerIndex), turn_state(before_card)) = InitialState,
+    nth0(PlayerIndex, AllCards, PlayerCards),
+    select(Card, PlayerCards, UpdatedPlayerCards),
+    put(AllCards, UpdatedAllCards, PlayerIndex, UpdatedPlayerCards),
+    compute_turn_state_after_played_card(Card, InitialState, TurnState, NextPlayerIndex),
+    NextState = game_state(all_balls(AllBalls), all_cards(UpdatedAllCards), current_player_index(NextPlayerIndex), turn_state(TurnState)).
+
+check_can_move(PlayerIndex, PlayerIndex, _).
+check_can_move(PlayerIndex, PairPlayer, AllBalls):-
+    player_pair(PlayerIndex, PairPlayer),
+    nth0(PlayerIndex, AllBalls, PlayerBalls),
+    all_balls_are_home(PlayerBalls, PlayerIndex).
+
+player_action(move(BallCollectionPlayerIndex, BallIndex, NewPosition), PlayerIndex, InitialState, NextState):-
+    game_state(all_balls(AllBalls), AllCardsTerm, current_player_index(PlayerIndex), turn_state(TurnState)) = InitialState,
+    check_can_move(PlayerIndex, BallCollectionPlayerIndex, AllBalls),
+    get_move_ball_constraints(MaxDistance, Mode, TurnState),
+    range(BallCollectionPlayerIndex, 0, 4), range(BallIndex, 0, 4),
+    nth0(BallCollectionPlayerIndex, AllBalls, PlayerBalls), nth0(BallIndex, PlayerBalls, Ball),
+    ball(Slot, IsHot) = Ball,
+    is_distance_ok(MaxDistance, Distance, Mode),
+    distance(Slot, NewPosition, Distance, IsHot, Mode, BallCollectionPlayerIndex),
+    move_ball_in_steps(AllBalls, NewAllBalls, BallCollectionPlayerIndex, BallIndex, Distance, Mode),
+    nth0(BallCollectionPlayerIndex, NewAllBalls, NewPlayerBalls), nth0(BallIndex, NewPlayerBalls, ball(NewPosition, _)),
+    build_new_state_after_move(PlayerIndex, TurnState, NewAllBalls, AllCardsTerm, Distance, NextState).
+
+player_action(put_ball_in_game(BallPlayerIndex), PlayerIndex, InitialState, NextState):-
+    game_state(all_balls(AllBalls), AllCardsTerm, current_player_index(PlayerIndex), turn_state(TurnState)) = InitialState,
+    can_put_ball_in_game(TurnState),
+    put_ball_in_game(AllBalls, NewAllBalls, BallPlayerIndex),
+    NextPlayerIndex is (PlayerIndex + 1) mod 4,
+    NextState = game_state(all_balls(NewAllBalls), AllCardsTerm, current_player_index(NextPlayerIndex), turn_state(before_card)).
+
+build_new_state_after_move(PlayerIndex, after_card(_), NewAllBalls, AllCardsTerm, _, NextState):-
+    NextPlayerIndex is (PlayerIndex + 1) mod 4,
+    NextState = game_state(all_balls(NewAllBalls), AllCardsTerm, current_player_index(NextPlayerIndex), turn_state(before_card)).
+
+build_new_state_after_move(PlayerIndex, after_7(X), NewAllBalls, AllCardsTerm, MovedDistance, NextState):-
+    NewAvailableDistance is X - MovedDistance,
+    NewAvailableDistance > 0, !,
+    NextState = game_state(all_balls(NewAllBalls), AllCardsTerm, current_player_index(PlayerIndex), turn_state(after_7(NewAvailableDistance))).
+
+build_new_state_after_move(PlayerIndex, after_7(_), NewAllBalls, AllCardsTerm, _, NextState):-
+    NextPlayerIndex is (PlayerIndex + 1) mod 4,
+    NextState = game_state(all_balls(NewAllBalls), AllCardsTerm, current_player_index(NextPlayerIndex), turn_state(before_card)).
 
 apply_motions(AllBalls, AllBalls, []).
 apply_motions(AllBalls, NewAllBalls, [M|R]):- apply_motion(AllBalls, Intermediate, M), apply_motions(Intermediate, NewAllBalls, R).
 
-apply_motion(AllBalls, NewAllBalls, put_ball_in_game(PlayerIndex)):-
-    put_ball_in_game(AllBalls, NewAllBalls, PlayerIndex).
+can_put_ball_in_game(after_card(13)).
+can_put_ball_in_game(after_card(1)).
 
-apply_motion(AllBalls, NewAllBalls, move(PlayerIndex, BallIndex, NewPosition)):-
-    nth0(PlayerIndex, AllBalls, PlayerBalls), nth0(BallIndex, PlayerBalls, Ball),
-    ball(Slot, IsHot) = Ball,
-    distance(Slot, NewPosition, Distance, IsHot, Mode),
-    move_single_ball(AllBalls, NewAllBalls, PlayerIndex, BallIndex, Distance, Mode).
+get_move_ball_constraints(4, backward, after_card(4)):-!.
+get_move_ball_constraints(X, distributed, after_7(X)):-!.
+get_move_ball_constraints(X, forward, after_card(X)):-integer(X).
+
+%not ok for 7
+is_distance_ok(MaxDistance, WantedDistance, distributed):- Aug is MaxDistance + 1, range(WantedDistance, 1, Aug).
+is_distance_ok(X, X, _).
 
 play(InitialState, NextState, PlayedCard):-
     play_no_throwaway(InitialState, NextState, PlayedCard).
@@ -103,11 +164,14 @@ is_next(s(X), s(Y), _, forward, _):- are_neighbors64(X, Y).
 is_next(s(X), s(Y), _, distributed, P):- is_next(s(X), s(Y), _, forward, P).
 is_next(s(X), s(Y), _, backward, _):- are_neighbors64(Y, X).
 
-distance(X, X, 0, _, _, _):-!.
-distance(Start, End, Distance, IsHot, Mode, P):-
-    is_next(Start, Intermediate, IsHot, Mode, P),
-    Ds is Distance - 1,
-    distance(Intermediate, End, Ds, IsHot, Mode, P).
+distance3(X, X, Accum, Accum, IsHot, Mode, P).
+distance3(X, Y, Distance, Accum, IsHot, Mode, P):-
+    Accum < 64,
+    is_next(X, A, IsHot, Mode, P),
+    Accum2 is Accum + 1,
+    distance3(A, Y, Distance, Accum2, IsHot, Mode, P).
+
+distance(X, Y, D, IsHot, Mode, P):-distance3(X, Y, D, 0, IsHot, Mode, P).
 
 all_balls_are_home(PlayerBalls, PlayerIndex):-
     member(ball(h(0, PlayerIndex), _), PlayerBalls),

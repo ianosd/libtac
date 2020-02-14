@@ -1,6 +1,7 @@
 import pygame
 import math
 from pyswip.prolog import Prolog
+from pyswip.easy import Functor, Atom
 
 # Useful game constants
 NUMBER_OF_SLOTS = 64
@@ -45,9 +46,10 @@ def draw_tac_board(surface):
         for home_ball_index in range(4):
             draw_ball_in_home_slot(surface, home_ball_index, player_index, (255, 255, 255))
 
-def draw_everything(surface, all_balls):
+def draw_everything(surface, game_state):
     draw_tac_board(surface)
 
+    all_balls = game_state["AllBalls"]
     for player_index, player_balls in enumerate(all_balls):
         draw_player_balls(surface, player_balls, player_index)
 
@@ -116,6 +118,22 @@ def draw_reserve_balls(surface, number_of_reserve_balls, player_index):
 def draw_slot_disk(surface, position, color):
     pygame.draw.circle(surface, color, position, int(SLOT_RADIUS))
         
+def compact(term):
+    if type(term) is str:
+        return term
+    if type(term) is list:
+        return '['+ ', '.join(map(compact, term)) + ']'
+    if type(term) is Functor:
+        return term.name.value + '(' + ', '.join(map(compact, term.args)) + ')'
+    if type(term) is Atom:
+        return term.value
+    else:
+        return str(term)
+
+        
+def compactify(game_state):
+    game_state_stringified = {key: compact(val) for key, val in game_state.items()}
+    return "game_state(all_balls({AllBalls}), all_cards({AllCards}), current_player_index({CurrentPlayerIndex}), turn_state({TurnState}))".format(**game_state_stringified)
 
 # Actual program
 pygame.init()
@@ -123,11 +141,21 @@ screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 done = False
 
 Prolog.consult("tac")
-all_balls = next(Prolog.query("sample_state(X)"))['X']
+game_state = next(Prolog.query("sample_state(game_state(all_balls(AllBalls), all_cards(AllCards), current_player_index(CurrentPlayerIndex), turn_state(TurnState)))"))
 
 while not done:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            done = True
-    draw_everything(screen, all_balls)
+    print(compactify(game_state))
+    draw_everything(screen, game_state)
     pygame.display.flip()
+    action = input("Enter action:")
+    if (action == "quit"):
+        done = True
+        continue
+
+    query = "InitialState = {}, player_action({}, {}, InitialState, game_state(all_balls(AllBalls), all_cards(AllCards), current_player_index(CurrentPlayerIndex), turn_state(TurnState)))".format(compactify(game_state), action, game_state["CurrentPlayerIndex"])
+    next_state = next(Prolog.query(query), None)
+    if next_state is not None:
+        game_state = next_state
+    else:
+        print("Bad command!")
+
