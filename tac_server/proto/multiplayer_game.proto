@@ -1,0 +1,14 @@
+syntax = "proto3";
+package multiplayer_game;
+
+service Multiplayer {
+    rpc MakeMove (MakeMoveRequest) returns (MakeMoveReply);
+}
+
+message MakeMoveRequest {
+    int64 player_number = 1;
+    string move = 2;
+}
+
+message MakeMoveReply {
+}
